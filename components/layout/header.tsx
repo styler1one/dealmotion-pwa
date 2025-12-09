@@ -37,9 +37,15 @@ export function Header({
             <ChevronLeft className="h-6 w-6" />
           </button>
         )}
-        {title && (
+        {title ? (
           <h1 className="text-lg font-semibold">{title}</h1>
-        )}
+        ) : !showBack ? (
+          /* Show logo on home page */
+          <>
+            <img src="/logo.svg" alt="DealMotion" className="h-7 dark:hidden" />
+            <img src="/logo-dark.svg" alt="DealMotion" className="h-7 hidden dark:block" />
+          </>
+        ) : null}
       </div>
 
       <div className="flex items-center gap-2">

@@ -179,13 +179,17 @@ export default function RecordPage() {
       const mimeType = mediaRecorderRef.current?.mimeType || 'audio/webm'
       const extension = mimeType.includes('webm') ? 'webm' : 'mp4'
       const blob = new Blob(chunksRef.current, { type: mimeType })
+      const localRecordingId = `pwa_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       
-      // Create form data
+      // Create form data with required fields for mobile API
       const formData = new FormData()
-      formData.append('file', blob, `recording.${extension}`)
-      formData.append('duration', duration.toString())
-      if (selectedMeeting) {
-        formData.append('meeting_id', selectedMeeting.id)
+      formData.append('file', blob, `recording_${localRecordingId}.${extension}`)
+      formData.append('duration_seconds', duration.toString())
+      formData.append('local_recording_id', localRecordingId)
+      
+      // Optional: link to prospect via meeting
+      if (selectedMeeting?.prospect_name) {
+        formData.append('prospect_name', selectedMeeting.prospect_name)
       }
 
       // Upload with progress
@@ -196,21 +200,27 @@ export default function RecordPage() {
         }
       }
 
-      await new Promise((resolve, reject) => {
+      const response = await new Promise<{ success: boolean; recording_id: string }>((resolve, reject) => {
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
-            resolve(xhr.response)
+            try {
+              resolve(JSON.parse(xhr.responseText))
+            } catch {
+              resolve({ success: true, recording_id: '' })
+            }
           } else {
-            reject(new Error('Upload failed'))
+            reject(new Error(`Upload failed: ${xhr.status}`))
           }
         }
-        xhr.onerror = () => reject(new Error('Upload failed'))
+        xhr.onerror = () => reject(new Error('Upload failed - network error'))
         
-        xhr.open('POST', `${process.env.NEXT_PUBLIC_API_URL}/api/v1/recordings/upload`)
+        // Use the mobile recordings endpoint
+        xhr.open('POST', `${process.env.NEXT_PUBLIC_API_URL}/api/v1/mobile/recordings/upload`)
         xhr.setRequestHeader('Authorization', `Bearer ${token}`)
         xhr.send(formData)
       })
 
+      console.log('Upload response:', response)
       setState('complete')
       
       // Redirect after success

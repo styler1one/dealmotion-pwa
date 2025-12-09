@@ -164,10 +164,16 @@ export default function LoginPage() {
       <div className="w-full max-w-sm space-y-6">
         {/* Logo */}
         <div className="text-center">
-          <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-2xl font-bold mb-4">
-            D
-          </div>
-          <h1 className="text-2xl font-bold">DealMotion</h1>
+          <img 
+            src="/logo.svg" 
+            alt="DealMotion" 
+            className="h-12 mx-auto mb-4 dark:hidden"
+          />
+          <img 
+            src="/logo-dark.svg" 
+            alt="DealMotion" 
+            className="h-12 mx-auto mb-4 hidden dark:block"
+          />
           <p className="text-muted-foreground">Put your deals in motion</p>
         </div>
 
