@@ -103,15 +103,16 @@ function NewPrepContent() {
     
     try {
       const token = await getToken()
+      // API expects: prospect_company_name, meeting_type, custom_notes, calendar_meeting_id
       const data = await api<{ id: string }>(
         '/api/v1/prep',
         {
           method: 'POST',
           body: {
-            prospect_id: selectedProspect.id,
-            meeting_id: selectedMeeting?.id,
-            meeting_type: meetingType,
-            notes: notes || undefined,
+            prospect_company_name: selectedProspect.company_name,
+            meeting_type: meetingType === 'followup' ? 'follow_up' : meetingType, // API uses 'follow_up' not 'followup'
+            custom_notes: notes || undefined,
+            calendar_meeting_id: selectedMeeting?.id || undefined,
             language: 'en',
           },
           token: token!,
