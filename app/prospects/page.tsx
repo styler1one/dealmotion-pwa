@@ -16,26 +16,35 @@ import Link from 'next/link'
 
 interface Prospect {
   id: string
-  name: string
+  company_name: string
   domain?: string
   industry?: string
-  has_research: boolean
-  has_preparation: boolean
-  has_followup: boolean
+  has_research?: boolean
+  has_preparation?: boolean
+  has_followup?: boolean
   next_meeting?: string
   last_activity?: string
+  created_at?: string
+}
+
+interface ProspectsResponse {
+  prospects: Prospect[]
+  total: number
+  has_more?: boolean
 }
 
 export default function ProspectsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   
-  const { data: prospects, isLoading } = useApi<Prospect[]>(
+  const { data: prospectsData, isLoading } = useApi<ProspectsResponse>(
     `/api/v1/prospects?search=${encodeURIComponent(searchQuery)}`
   )
+  
+  const prospects = prospectsData?.prospects || []
 
   // Separate prospects with upcoming meetings
-  const withMeetings = prospects?.filter(p => p.next_meeting) || []
-  const withoutMeetings = prospects?.filter(p => !p.next_meeting) || []
+  const withMeetings = prospects.filter(p => p.next_meeting)
+  const withoutMeetings = prospects.filter(p => !p.next_meeting)
 
   return (
     <AppShell>
@@ -123,22 +132,22 @@ function ProspectCard({ prospect }: { prospect: Prospect }) {
 
             {/* Content */}
             <div className="flex-1 min-w-0">
-              <p className="font-semibold truncate">{prospect.name}</p>
+              <p className="font-semibold truncate">{prospect.company_name}</p>
               
               {/* Status indicators */}
               <div className="flex items-center gap-2 mt-1">
                 <StatusIndicator 
-                  active={prospect.has_research} 
+                  active={prospect.has_research ?? false} 
                   icon={FileText}
                   label="R" 
                 />
                 <StatusIndicator 
-                  active={prospect.has_preparation} 
+                  active={prospect.has_preparation ?? false} 
                   icon={FileText}
                   label="P" 
                 />
                 <StatusIndicator 
-                  active={prospect.has_followup} 
+                  active={prospect.has_followup ?? false} 
                   icon={Mic}
                   label="F" 
                 />

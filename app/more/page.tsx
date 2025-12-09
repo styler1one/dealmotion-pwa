@@ -4,7 +4,6 @@
 export const dynamic = 'force-dynamic'
 
 import { useAuth } from '@/lib/hooks/use-auth'
-import { useApi } from '@/lib/hooks/use-api'
 import { AppShell } from '@/components/layout/app-shell'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent } from '@/components/ui/card'
@@ -12,35 +11,21 @@ import { Button } from '@/components/ui/button'
 import { 
   User, 
   Settings, 
-  Bell, 
-  Globe, 
   HelpCircle, 
   ExternalLink, 
   LogOut,
-  ChevronRight,
-  Zap
+  ChevronRight
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
-interface UserProfile {
-  full_name?: string
-  email?: string
-  subscription_tier?: string
-}
-
-interface UsageStats {
-  research_used: number
-  research_limit: number
-  flows_used: number
-  flows_limit: number
-}
-
 export default function MorePage() {
   const router = useRouter()
   const { user, signOut } = useAuth()
-  const { data: profile } = useApi<UserProfile>('/api/v1/profile')
-  const { data: usage } = useApi<UsageStats>('/api/v1/subscription/usage')
+  
+  // Get user info from auth - no separate API call needed
+  const userEmail = user?.email
+  const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'
 
   const handleSignOut = async () => {
     await signOut()
@@ -50,22 +35,13 @@ export default function MorePage() {
   const menuItems = [
     {
       icon: User,
-      label: 'Profile',
-      href: '/settings/profile',
-    },
-    {
-      icon: Bell,
-      label: 'Notifications',
-      href: '/settings/notifications',
-    },
-    {
-      icon: Globe,
-      label: 'Language',
-      href: '/settings/language',
+      label: 'Profile Settings',
+      href: 'https://dealmotion.ai/dashboard/settings',
+      external: true,
     },
     {
       icon: Settings,
-      label: 'Full Settings',
+      label: 'All Settings',
       href: 'https://dealmotion.ai/dashboard/settings',
       external: true,
     },
@@ -87,46 +63,19 @@ export default function MorePage() {
           <CardContent className="p-4">
             <div className="flex items-center gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl font-bold">
-                {(profile?.full_name || user?.email || 'U')[0].toUpperCase()}
+                {userName[0].toUpperCase()}
               </div>
               <div className="flex-1">
                 <p className="font-semibold">
-                  {profile?.full_name || 'User'}
+                  {userName}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {user?.email}
-                </p>
-                <p className="text-xs text-primary font-medium mt-1">
-                  {profile?.subscription_tier || 'Free'} Plan
+                  {userEmail}
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
-
-        {/* Usage Stats */}
-        {usage && (
-          <Card>
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Zap className="h-4 w-4 text-primary" />
-                Usage This Month
-              </div>
-              
-              <UsageBar
-                label="Research"
-                used={usage.research_used}
-                limit={usage.research_limit}
-              />
-              
-              <UsageBar
-                label="Flows"
-                used={usage.flows_used}
-                limit={usage.flows_limit}
-              />
-            </CardContent>
-          </Card>
-        )}
 
         {/* Menu Items */}
         <Card>
@@ -169,38 +118,6 @@ export default function MorePage() {
         </p>
       </div>
     </AppShell>
-  )
-}
-
-function UsageBar({
-  label,
-  used,
-  limit,
-}: {
-  label: string
-  used: number
-  limit: number
-}) {
-  const percentage = Math.min((used / limit) * 100, 100)
-  const isNearLimit = percentage >= 80
-
-  return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-sm">
-        <span className="text-muted-foreground">{label}</span>
-        <span className={isNearLimit ? 'text-amber-500 font-medium' : ''}>
-          {used} / {limit}
-        </span>
-      </div>
-      <div className="h-2 rounded-full bg-muted overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${
-            isNearLimit ? 'bg-amber-500' : 'bg-primary'
-          }`}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
-    </div>
   )
 }
 
