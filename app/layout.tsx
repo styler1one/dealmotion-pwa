@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+import { IosInstallPrompt } from '@/components/pwa/ios-install-prompt'
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -58,9 +59,24 @@ export default function RootLayout({
         <meta name="msapplication-TileColor" content="#6366f1" />
         <meta name="msapplication-tap-highlight" content="no" />
         
+        {/* Apple Touch Icons */}
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" sizes="152x152" href="/icons/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" sizes="167x167" href="/icons/apple-touch-icon.png" />
+        
+        {/* Apple Splash Screens - iPhone */}
+        <link 
+          rel="apple-touch-startup-image" 
+          href="/icons/splash.png"
+          media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)"
+        />
       </head>
       <body className={`${inter.className} antialiased`}>
         {children}
+        
+        {/* iOS Install Prompt */}
+        <IosInstallPrompt />
         
         {/* Service Worker Registration */}
         <script
