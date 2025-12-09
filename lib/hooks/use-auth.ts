@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { User, Session } from '@supabase/supabase-js'
+import type { User, Session, SupabaseClient } from '@supabase/supabase-js'
 
 interface AuthState {
   user: User | null
@@ -16,53 +16,66 @@ export function useAuth() {
     session: null,
     loading: true,
   })
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null)
 
-  const supabase = createClient()
-
+  // Initialize Supabase client on mount
   useEffect(() => {
+    const client = createClient()
+    setSupabase(client)
+  }, [])
+
+  // Handle auth state when client is ready
+  useEffect(() => {
+    if (!supabase) {
+      return
+    }
+
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data }) => {
       setAuthState({
-        user: session?.user ?? null,
-        session,
+        user: data.session?.user ?? null,
+        session: data.session,
         loading: false,
       })
     })
 
     // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAuthState({
-        user: session?.user ?? null,
-        session,
-        loading: false,
-      })
-    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setAuthState({
+          user: session?.user ?? null,
+          session,
+          loading: false,
+        })
+      }
+    )
 
     return () => subscription.unsubscribe()
-  }, [supabase.auth])
+  }, [supabase])
 
   const signIn = useCallback(
     async (email: string, password: string) => {
+      if (!supabase) return { error: new Error('Supabase not initialized') }
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
       return { error }
     },
-    [supabase.auth]
+    [supabase]
   )
 
   const signOut = useCallback(async () => {
+    if (!supabase) return { error: new Error('Supabase not initialized') }
     const { error } = await supabase.auth.signOut()
     return { error }
-  }, [supabase.auth])
+  }, [supabase])
 
   const getToken = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    return session?.access_token ?? null
-  }, [supabase.auth])
+    if (!supabase) return null
+    const { data } = await supabase.auth.getSession()
+    return data.session?.access_token ?? null
+  }, [supabase])
 
   return {
     ...authState,
@@ -72,4 +85,3 @@ export function useAuth() {
     isAuthenticated: !!authState.session,
   }
 }
-

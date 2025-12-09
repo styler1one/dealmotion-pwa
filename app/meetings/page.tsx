@@ -1,5 +1,8 @@
 'use client'
 
+// Force dynamic rendering - this page uses authentication
+export const dynamic = 'force-dynamic'
+
 import { useState } from 'react'
 import { useApi } from '@/lib/hooks/use-api'
 import { AppShell } from '@/components/layout/app-shell'
