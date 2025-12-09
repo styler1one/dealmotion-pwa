@@ -75,6 +75,8 @@ function RecordContent() {
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const animationRef = useRef<number | null>(null)
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null)
+  const silentAudioRef = useRef<HTMLAudioElement | null>(null)
 
   // Auto-select prospect from URL
   useEffect(() => {
@@ -133,12 +135,85 @@ function RecordContent() {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop()
       }
+      // Clean up wake lock and silent audio
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {})
+      }
+      if (silentAudioRef.current) {
+        silentAudioRef.current.pause()
+        silentAudioRef.current.src = ''
+      }
     }
   }, [])
 
   const filteredProspects = prospects.filter(p =>
     p.company_name.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  // Request wake lock to keep screen on during recording
+  const requestWakeLock = async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await navigator.wakeLock.request('screen')
+        console.log('Wake lock acquired')
+        
+        // Re-acquire wake lock if released (e.g., tab switch)
+        wakeLockRef.current.addEventListener('release', async () => {
+          console.log('Wake lock released, trying to re-acquire...')
+          if (state === 'recording' || state === 'paused') {
+            try {
+              wakeLockRef.current = await navigator.wakeLock.request('screen')
+              console.log('Wake lock re-acquired')
+            } catch (err) {
+              console.log('Could not re-acquire wake lock:', err)
+            }
+          }
+        })
+      }
+    } catch (err) {
+      console.log('Wake lock not supported or failed:', err)
+    }
+  }
+
+  // Release wake lock
+  const releaseWakeLock = async () => {
+    if (wakeLockRef.current) {
+      try {
+        await wakeLockRef.current.release()
+        wakeLockRef.current = null
+        console.log('Wake lock released')
+      } catch (err) {
+        console.log('Error releasing wake lock:', err)
+      }
+    }
+  }
+
+  // Start silent audio to keep browser active (fallback for iOS)
+  const startSilentAudio = () => {
+    try {
+      // Create a silent audio element that loops
+      const audio = new Audio()
+      // Tiny silent MP3 (base64 encoded)
+      audio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwmHAAAAAAD/+1DEAAAGAAGn9AAAIgAANIAAAARMQU1FMy4xMDBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV'
+      audio.loop = true
+      audio.volume = 0.01 // Nearly silent but not 0 (some browsers ignore 0)
+      audio.play().catch(err => console.log('Silent audio failed:', err))
+      silentAudioRef.current = audio
+      console.log('Silent audio started')
+    } catch (err) {
+      console.log('Silent audio not supported:', err)
+    }
+  }
+
+  // Stop silent audio
+  const stopSilentAudio = () => {
+    if (silentAudioRef.current) {
+      silentAudioRef.current.pause()
+      silentAudioRef.current.src = ''
+      silentAudioRef.current = null
+      console.log('Silent audio stopped')
+    }
+  }
 
   const startRecording = async () => {
     if (!selectedProspect) {
@@ -148,6 +223,12 @@ function RecordContent() {
 
     try {
       setError(null)
+      
+      // Request wake lock to prevent screen from sleeping
+      await requestWakeLock()
+      
+      // Start silent audio as fallback (helps on iOS)
+      startSilentAudio()
       
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -212,6 +293,10 @@ function RecordContent() {
     } catch (err) {
       console.error('Recording error:', err)
       setError('Could not access microphone. Please allow microphone access.')
+      
+      // Clean up wake lock and silent audio on error
+      await releaseWakeLock()
+      stopSilentAudio()
     }
   }
 
@@ -233,10 +318,15 @@ function RecordContent() {
     }
   }
 
-  const stopRecording = () => {
+  const stopRecording = async () => {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop()
       if (timerRef.current) clearInterval(timerRef.current)
+      
+      // Release wake lock and stop silent audio
+      await releaseWakeLock()
+      stopSilentAudio()
+      
       setState('stopped')
     }
   }
@@ -704,11 +794,15 @@ function RecordContent() {
 
         {/* Tips */}
         {(state === 'recording' || state === 'paused') && (
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-sm text-muted-foreground">
-                💡 <strong>Tip:</strong> Keep this tab open while recording. 
-                The screen can be turned off, but don&apos;t close the browser.
+          <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900">
+            <CardContent className="p-4 space-y-2">
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                📱 Screen stays on during recording
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                We&apos;ve enabled wake lock to keep your screen active. 
+                If you manually lock your phone, the recording may pause. 
+                For best results, keep this screen visible.
               </p>
             </CardContent>
           </Card>
