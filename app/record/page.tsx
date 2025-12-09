@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { cn, formatDuration } from '@/lib/utils'
-import { Mic, Square, Pause, Play, Upload, AlertTriangle, ChevronDown, Check, Building2, Search } from 'lucide-react'
+import { Mic, Square, Pause, Play, Upload, AlertTriangle, ChevronDown, Check, Building2, Search, FileText } from 'lucide-react'
 
 interface Prospect {
   id: string
@@ -25,6 +25,21 @@ interface Prospect {
 interface ProspectsResponse {
   prospects: Prospect[]
   total: number
+}
+
+interface Preparation {
+  id: string
+  meeting_subject?: string
+  meeting_date?: string
+  created_at: string
+  status: string
+}
+
+interface ProspectHubResponse {
+  prospect: Prospect
+  preparations: Preparation[]
+  followups: unknown[]
+  research: unknown
 }
 
 type RecordingState = 'idle' | 'recording' | 'paused' | 'stopped' | 'uploading' | 'complete'
@@ -48,6 +63,12 @@ function RecordContent() {
   const [error, setError] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [audioLevel, setAudioLevel] = useState(0)
+  
+  // Preparation state
+  const [preparations, setPreparations] = useState<Preparation[]>([])
+  const [selectedPreparation, setSelectedPreparation] = useState<Preparation | null>(null)
+  const [showPrepPicker, setShowPrepPicker] = useState(false)
+  const [loadingPreps, setLoadingPreps] = useState(false)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -62,6 +83,47 @@ function RecordContent() {
       if (prospect) setSelectedProspect(prospect)
     }
   }, [preselectedProspectId, prospects, selectedProspect])
+
+  // Fetch preparations when prospect changes
+  useEffect(() => {
+    const fetchPreparations = async () => {
+      if (!selectedProspect) {
+        setPreparations([])
+        setSelectedPreparation(null)
+        return
+      }
+
+      setLoadingPreps(true)
+      try {
+        const token = await getToken()
+        if (!token) return
+
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/v1/prospects/${selectedProspect.id}/hub`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          }
+        )
+
+        if (response.ok) {
+          const data: ProspectHubResponse = await response.json()
+          // Filter to only show completed preparations
+          const completedPreps = (data.preparations || []).filter(
+            p => p.status === 'completed'
+          )
+          setPreparations(completedPreps)
+        }
+      } catch (err) {
+        console.error('Error fetching preparations:', err)
+      } finally {
+        setLoadingPreps(false)
+      }
+    }
+
+    fetchPreparations()
+  }, [selectedProspect, getToken])
 
   // Clean up on unmount
   useEffect(() => {
@@ -202,6 +264,11 @@ function RecordContent() {
       formData.append('prospect_company_name', selectedProspect.company_name)
       formData.append('include_coaching', 'false')
       formData.append('language', 'en')
+      
+      // Link to preparation if selected (provides extra context for analysis)
+      if (selectedPreparation) {
+        formData.append('meeting_prep_id', selectedPreparation.id)
+      }
 
       // Upload with progress
       const xhr = new XMLHttpRequest()
@@ -323,6 +390,7 @@ function RecordContent() {
                         key={prospect.id}
                         onClick={() => {
                           setSelectedProspect(prospect)
+                          setSelectedPreparation(null) // Reset preparation when company changes
                           setShowProspectPicker(false)
                           setSearchQuery('')
                         }}
@@ -349,6 +417,110 @@ function RecordContent() {
             )}
           </CardContent>
         </Card>
+
+        {/* Preparation Selector (Optional) - only show when prospect is selected */}
+        {selectedProspect && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">Meeting Preparation</span>
+                <span className="text-xs text-muted-foreground">(optional)</span>
+              </div>
+              
+              {loadingPreps ? (
+                <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+                  <Spinner size="sm" />
+                  <span>Loading preparations...</span>
+                </div>
+              ) : preparations.length === 0 ? (
+                <p className="text-sm text-muted-foreground p-3">
+                  No preparations found for this company
+                </p>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setShowPrepPicker(!showPrepPicker)}
+                    className="w-full flex items-center justify-between p-3 rounded-lg border hover:bg-muted transition-colors"
+                    disabled={state !== 'idle'}
+                  >
+                    <div className="text-left">
+                      {selectedPreparation ? (
+                        <div>
+                          <p className="font-medium text-sm">
+                            {selectedPreparation.meeting_subject || 'Meeting Preparation'}
+                          </p>
+                          {selectedPreparation.meeting_date && (
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(selectedPreparation.meeting_date).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">Select a preparation (optional)</p>
+                      )}
+                    </div>
+                    <ChevronDown className={cn(
+                      'h-5 w-5 transition-transform',
+                      showPrepPicker && 'rotate-180'
+                    )} />
+                  </button>
+
+                  {showPrepPicker && (
+                    <div className="mt-3 pt-3 border-t">
+                      <div className="max-h-48 overflow-y-auto space-y-1">
+                        {/* Option to clear selection */}
+                        <button
+                          onClick={() => {
+                            setSelectedPreparation(null)
+                            setShowPrepPicker(false)
+                          }}
+                          className={cn(
+                            'w-full flex items-center justify-between p-3 rounded-lg text-left',
+                            !selectedPreparation ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+                          )}
+                        >
+                          <span className="text-sm text-muted-foreground">No preparation</span>
+                          {!selectedPreparation && <Check className="h-5 w-5" />}
+                        </button>
+                        
+                        {preparations.map((prep) => (
+                          <button
+                            key={prep.id}
+                            onClick={() => {
+                              setSelectedPreparation(prep)
+                              setShowPrepPicker(false)
+                            }}
+                            className={cn(
+                              'w-full flex items-center justify-between p-3 rounded-lg text-left',
+                              selectedPreparation?.id === prep.id
+                                ? 'bg-primary/10 text-primary'
+                                : 'hover:bg-muted'
+                            )}
+                          >
+                            <div>
+                              <p className="font-medium text-sm">
+                                {prep.meeting_subject || 'Meeting Preparation'}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {prep.meeting_date 
+                                  ? new Date(prep.meeting_date).toLocaleDateString()
+                                  : new Date(prep.created_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                            {selectedPreparation?.id === prep.id && (
+                              <Check className="h-5 w-5" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Recording UI */}
         <div className="flex flex-col items-center py-8">
