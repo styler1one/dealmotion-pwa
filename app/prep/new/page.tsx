@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/hooks/use-auth'
 import { useApi } from '@/lib/hooks/use-api'
@@ -8,7 +8,6 @@ import { AppShell } from '@/components/layout/app-shell'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { cn, formatTime } from '@/lib/utils'
 import { Building2, Calendar, Check, ChevronDown, Sparkles, Search, AlertCircle } from 'lucide-react'
@@ -37,7 +36,7 @@ const MEETING_TYPES = [
   { value: 'closing', label: 'Closing' },
 ]
 
-export default function NewPrepPage() {
+function NewPrepContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { getToken } = useAuth()
@@ -322,3 +321,17 @@ export default function NewPrepPage() {
   )
 }
 
+export default function NewPrepPage() {
+  return (
+    <Suspense fallback={
+      <AppShell hideNav>
+        <Header title="New Preparation" showBack />
+        <div className="flex items-center justify-center py-12">
+          <Spinner size="lg" />
+        </div>
+      </AppShell>
+    }>
+      <NewPrepContent />
+    </Suspense>
+  )
+}
