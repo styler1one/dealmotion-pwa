@@ -76,6 +76,7 @@ function RecordContent() {
   const analyserRef = useRef<AnalyserNode | null>(null)
   const animationRef = useRef<number | null>(null)
   const wakeLockRef = useRef<WakeLockSentinel | null>(null)
+  const keepAliveAudioRef = useRef<HTMLAudioElement | null>(null)
 
   // Auto-select prospect from URL
   useEffect(() => {
@@ -138,6 +139,13 @@ function RecordContent() {
       if (wakeLockRef.current) {
         wakeLockRef.current.release().catch(() => {})
       }
+      // Clean up keep-alive audio
+      if (keepAliveAudioRef.current) {
+        keepAliveAudioRef.current.pause()
+        keepAliveAudioRef.current.remove()
+      }
+      const existingAudio = document.getElementById('pwa-keep-alive-audio')
+      if (existingAudio) existingAudio.remove()
     }
   }, [])
 
@@ -180,6 +188,65 @@ function RecordContent() {
       } catch (err) {
         console.log('Error releasing wake lock:', err)
       }
+    }
+  }
+
+  // Check if running as standalone PWA (home screen app)
+  const isStandalonePWA = () => {
+    return (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      ('standalone' in window.navigator && (window.navigator as Navigator & { standalone?: boolean }).standalone === true)
+    )
+  }
+
+  // Start keep-alive audio for standalone PWA mode
+  // This uses a real audio element (not AudioContext) to keep the app active
+  const startKeepAliveAudio = () => {
+    if (!isStandalonePWA()) {
+      console.log('Not in standalone mode, skipping keep-alive audio')
+      return
+    }
+    
+    try {
+      // Create audio element with a tiny silent MP3
+      const audio = document.createElement('audio')
+      audio.id = 'pwa-keep-alive-audio'
+      // Silent MP3 - very short, loops continuously
+      audio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwmHAAAAAAD/+1DEAAAGAAGn9AAAIgAANIAAAARMQU1FMy4xMDBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV'
+      audio.loop = true
+      audio.volume = 0.01  // Very quiet but not zero
+      audio.setAttribute('playsinline', 'true')
+      audio.setAttribute('webkit-playsinline', 'true')
+      
+      // Append to body and play
+      document.body.appendChild(audio)
+      
+      const playPromise = audio.play()
+      if (playPromise) {
+        playPromise
+          .then(() => console.log('Keep-alive audio started for PWA'))
+          .catch(err => console.log('Keep-alive audio failed:', err))
+      }
+      
+      keepAliveAudioRef.current = audio
+    } catch (err) {
+      console.log('Could not start keep-alive audio:', err)
+    }
+  }
+  
+  // Stop keep-alive audio
+  const stopKeepAliveAudio = () => {
+    if (keepAliveAudioRef.current) {
+      keepAliveAudioRef.current.pause()
+      keepAliveAudioRef.current.remove()
+      keepAliveAudioRef.current = null
+      console.log('Keep-alive audio stopped')
+    }
+    // Also try to remove by ID in case ref was lost
+    const existingAudio = document.getElementById('pwa-keep-alive-audio')
+    if (existingAudio) {
+      ;(existingAudio as HTMLAudioElement).pause()
+      existingAudio.remove()
     }
   }
 
@@ -284,6 +351,9 @@ function RecordContent() {
 
       mediaRecorder.start(1000) // Collect data every second
 
+      // Start keep-alive audio for standalone PWA (must be after mediaRecorder.start)
+      startKeepAliveAudio()
+
       // Start timer
       timerRef.current = setInterval(() => {
         setDuration(d => d + 1)
@@ -294,9 +364,10 @@ function RecordContent() {
       console.error('Recording error:', err)
       setError('Could not access microphone. Please allow microphone access.')
       
-      // Clean up wake lock and silent audio on error
+      // Clean up on error
       await releaseWakeLock()
       clearMediaSession()
+      stopKeepAliveAudio()
     }
   }
 
@@ -323,9 +394,10 @@ function RecordContent() {
       mediaRecorderRef.current.stop()
       if (timerRef.current) clearInterval(timerRef.current)
       
-      // Release wake lock and stop silent audio
+      // Release wake lock and stop keep-alive audio
       await releaseWakeLock()
       clearMediaSession()
+      stopKeepAliveAudio()
       
       setState('stopped')
     }
