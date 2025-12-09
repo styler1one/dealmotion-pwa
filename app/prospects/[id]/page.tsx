@@ -20,7 +20,8 @@ import {
   Mic,
   Search,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Plus
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -149,7 +150,7 @@ export default function ProspectDetailPage() {
         </Card>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <Link href={`/research/new?prospectId=${prospect.id}`}>
             <Button variant="outline" className="w-full h-auto py-3">
               <div className="flex flex-col items-center gap-1">
@@ -163,6 +164,14 @@ export default function ProspectDetailPage() {
               <div className="flex flex-col items-center gap-1">
                 <FileText className="h-5 w-5" />
                 <span className="text-xs">Prepare</span>
+              </div>
+            </Button>
+          </Link>
+          <Link href={`/record?prospectId=${prospect.id}`}>
+            <Button variant="outline" className="w-full h-auto py-3">
+              <div className="flex flex-col items-center gap-1">
+                <Mic className="h-5 w-5" />
+                <span className="text-xs">Record</span>
               </div>
             </Button>
           </Link>
@@ -226,63 +235,123 @@ export default function ProspectDetailPage() {
           </Card>
         )}
 
-        {/* Preparations */}
-        {preparations && preparations.length > 0 && (
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-3">
+        {/* Meeting Preparations */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
                 <FileText className="h-5 w-5 text-primary" />
-                <span className="font-medium">Preparations ({preparations.length})</span>
+                <span className="font-medium">Meeting Preparations</span>
+                {preparations && preparations.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    {preparations.length}
+                  </Badge>
+                )}
               </div>
-              <div className="space-y-2">
-                {preparations.slice(0, 3).map(prep => (
+            </div>
+            
+            {/* Existing preparations */}
+            {preparations && preparations.length > 0 ? (
+              <div className="space-y-2 mb-3">
+                {preparations.map(prep => (
                   <Link key={prep.id} href={`/prep/${prep.id}`}>
-                    <div className="flex items-center justify-between p-2 rounded-lg hover:bg-muted transition-colors">
-                      <div>
-                        <p className="font-medium text-sm">
-                          {prep.meeting_title || 'Preparation'}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(prep.created_at).toLocaleDateString()}
-                        </p>
+                    <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <FileText className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">
+                            {prep.meeting_title || 'Meeting Preparation'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(prep.created_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </p>
+                        </div>
                       </div>
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </Link>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-        )}
+            ) : (
+              <p className="text-sm text-muted-foreground mb-3">
+                No preparations yet. Create one before your next meeting!
+              </p>
+            )}
+            
+            {/* Add new preparation button */}
+            <Link href={`/prep/new?prospectId=${prospect.id}`}>
+              <Button variant="outline" size="sm" className="w-full">
+                <Plus className="h-4 w-4 mr-2" />
+                New Preparation
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
 
-        {/* Followups */}
-        {followups && followups.length > 0 && (
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-3">
+        {/* Meeting Recordings */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
                 <Mic className="h-5 w-5 text-primary" />
-                <span className="font-medium">Follow-ups ({followups.length})</span>
+                <span className="font-medium">Meeting Recordings</span>
+                {followups && followups.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    {followups.length}
+                  </Badge>
+                )}
               </div>
-              <div className="space-y-2">
-                {followups.slice(0, 3).map(followup => (
+            </div>
+            
+            {/* Existing recordings/followups */}
+            {followups && followups.length > 0 ? (
+              <div className="space-y-2 mb-3">
+                {followups.map(followup => (
                   <Link key={followup.id} href={`/followup/${followup.id}`}>
-                    <div className="flex items-center justify-between p-2 rounded-lg hover:bg-muted transition-colors">
-                      <div>
-                        <p className="font-medium text-sm">
-                          {followup.meeting_title || 'Follow-up'}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(followup.created_at).toLocaleDateString()}
-                        </p>
+                    <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-500/10 text-orange-500">
+                          <Mic className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">
+                            {followup.meeting_title || 'Meeting Recording'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(followup.created_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </p>
+                        </div>
                       </div>
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </Link>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-        )}
+            ) : (
+              <p className="text-sm text-muted-foreground mb-3">
+                No recordings yet. Record your next meeting for AI analysis!
+              </p>
+            )}
+            
+            {/* Add new recording button */}
+            <Link href={`/record?prospectId=${prospect.id}`}>
+              <Button variant="outline" size="sm" className="w-full">
+                <Plus className="h-4 w-4 mr-2" />
+                New Recording
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
 
         {/* Open in Web */}
         <a 
