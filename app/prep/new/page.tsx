@@ -18,9 +18,14 @@ import { api } from '@/lib/api'
 
 interface Prospect {
   id: string
-  name: string
+  company_name: string
   domain?: string
-  has_research: boolean
+  has_research?: boolean
+}
+
+interface ProspectsResponse {
+  prospects: Prospect[]
+  total: number
 }
 
 interface Meeting {
@@ -30,6 +35,12 @@ interface Meeting {
   prospect_id?: string
   prospect_name?: string
   is_prepared: boolean
+}
+
+interface MeetingsResponse {
+  meetings: Meeting[]
+  total: number
+  has_more: boolean
 }
 
 const MEETING_TYPES = [
@@ -45,9 +56,14 @@ function NewPrepContent() {
   const { getToken } = useAuth()
   
   const preselectedMeetingId = searchParams.get('meeting')
+  const preselectedProspectId = searchParams.get('prospectId')
   
-  const { data: meetings } = useApi<Meeting[]>('/api/v1/calendar-meetings?filter=week&unprepared=true')
-  const { data: prospects } = useApi<Prospect[]>('/api/v1/prospects')
+  const { data: meetingsData } = useApi<MeetingsResponse>('/api/v1/calendar-meetings?unprepared_only=true')
+  const { data: prospectsData } = useApi<ProspectsResponse>('/api/v1/prospects')
+  
+  // Extract arrays from response objects
+  const meetings = meetingsData?.meetings || []
+  const prospects = prospectsData?.prospects || []
   
   const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null)
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null)
@@ -72,9 +88,9 @@ function NewPrepContent() {
     }
   }, [preselectedMeetingId, meetings, prospects])
 
-  const filteredProspects = prospects?.filter(p =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || []
+  const filteredProspects = prospects.filter(p =>
+    p.company_name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
   const createPreparation = async () => {
     if (!selectedProspect) {
@@ -172,7 +188,7 @@ function NewPrepContent() {
                       <Building2 className="h-5 w-5" />
                     </div>
                     <div className="text-left">
-                      <p className="font-medium">{selectedProspect.name}</p>
+                      <p className="font-medium">{selectedProspect.company_name}</p>
                       {selectedProspect.has_research ? (
                         <p className="text-xs text-green-600">✅ Research available</p>
                       ) : (
@@ -217,7 +233,7 @@ function NewPrepContent() {
                             : 'hover:bg-muted'
                         )}
                       >
-                        <span className="font-medium">{prospect.name}</span>
+                        <span className="font-medium">{prospect.company_name}</span>
                         {selectedProspect?.id === prospect.id && (
                           <Check className="h-4 w-4" />
                         )}

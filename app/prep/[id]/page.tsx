@@ -19,14 +19,15 @@ import { use } from 'react'
 interface Preparation {
   id: string
   status: 'pending' | 'processing' | 'completed' | 'failed'
-  prospect_name: string
+  prospect_company_name?: string
+  prospect_name?: string
   meeting_type?: string
   brief?: string
   talking_points?: string[]
   questions_to_ask?: string[]
   strategy?: string
-  created_at: string
-  updated_at: string
+  created_at?: string
+  updated_at?: string
 }
 
 export default function PrepDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -85,7 +86,7 @@ export default function PrepDetailPage({ params }: { params: Promise<{ id: strin
                 <Building2 className="h-7 w-7" />
               </div>
               <div className="flex-1">
-                <h1 className="text-xl font-bold">{prep.prospect_name}</h1>
+                <h1 className="text-xl font-bold">{prep.prospect_company_name || prep.prospect_name || 'Company'}</h1>
                 {prep.meeting_type && (
                   <Badge variant="secondary" className="capitalize mt-1">
                     {prep.meeting_type}
@@ -101,9 +102,11 @@ export default function PrepDetailPage({ params }: { params: Promise<{ id: strin
           <Badge variant={prep.status === 'completed' ? 'success' : 'warning'}>
             {prep.status === 'completed' ? '✅ Ready' : '⏳ Preparing...'}
           </Badge>
-          <span className="text-xs text-muted-foreground">
-            Updated {getRelativeTime(prep.updated_at)}
-          </span>
+          {(prep.updated_at || prep.created_at) && (
+            <span className="text-xs text-muted-foreground">
+              Updated {getRelativeTime(prep.updated_at || prep.created_at || '')}
+            </span>
+          )}
         </div>
 
         {/* Processing State */}

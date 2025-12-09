@@ -24,12 +24,21 @@ interface Meeting {
   prospect_name?: string
 }
 
+interface MeetingsResponse {
+  meetings: Meeting[]
+  total: number
+  has_more: boolean
+}
+
 type RecordingState = 'idle' | 'recording' | 'paused' | 'stopped' | 'uploading' | 'complete'
 
 export default function RecordPage() {
   const router = useRouter()
   const { getToken } = useAuth()
-  const { data: meetings } = useApi<Meeting[]>('/api/v1/calendar-meetings?filter=today')
+  const { data: meetingsData } = useApi<MeetingsResponse>('/api/v1/calendar-meetings')
+  
+  // Extract meetings array from response
+  const meetings = meetingsData?.meetings || []
 
   const [state, setState] = useState<RecordingState>('idle')
   const [duration, setDuration] = useState(0)
