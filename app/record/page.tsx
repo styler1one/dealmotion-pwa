@@ -76,7 +76,7 @@ function RecordContent() {
   const analyserRef = useRef<AnalyserNode | null>(null)
   const animationRef = useRef<number | null>(null)
   const wakeLockRef = useRef<WakeLockSentinel | null>(null)
-  const silentAudioRef = useRef<HTMLAudioElement | null>(null)
+  const silentAudioRef = useRef<{ oscillator: OscillatorNode; context: AudioContext } | HTMLAudioElement | null>(null)
 
   // Auto-select prospect from URL
   useEffect(() => {
@@ -135,14 +135,25 @@ function RecordContent() {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop()
       }
-      // Clean up wake lock and silent audio
+      // Clean up wake lock
       if (wakeLockRef.current) {
         wakeLockRef.current.release().catch(() => {})
       }
-      if (silentAudioRef.current) {
-        silentAudioRef.current.pause()
-        silentAudioRef.current.src = ''
+      // Clean up background audio
+      const ref = silentAudioRef.current as { oscillator?: OscillatorNode; context?: AudioContext } | HTMLAudioElement | null
+      if (ref) {
+        if ('oscillator' in ref && ref.oscillator) {
+          try {
+            ref.oscillator.stop()
+            ref.context?.close()
+          } catch {}
+        } else if ('pause' in ref) {
+          ;(ref as HTMLAudioElement).pause()
+        }
       }
+      // Remove backup audio element
+      const backupAudio = document.getElementById('dealmotion-background-audio')
+      if (backupAudio) backupAudio.remove()
     }
   }, [])
 
@@ -188,31 +199,109 @@ function RecordContent() {
     }
   }
 
-  // Start silent audio to keep browser active (fallback for iOS)
-  const startSilentAudio = () => {
+  // Start background audio to keep browser active during screen lock
+  // This uses the Media Session API to make the browser think it's playing music
+  const startBackgroundAudio = () => {
     try {
-      // Create a silent audio element that loops
-      const audio = new Audio()
-      // Tiny silent MP3 (base64 encoded)
-      audio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwmHAAAAAAD/+1DEAAAGAAGn9AAAIgAANIAAAARMQU1FMy4xMDBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV'
+      // Create audio context for generating a very low frequency tone
+      // This keeps the audio system active without being audible
+      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+      
+      // Create oscillator at very low frequency (sub-bass, barely audible)
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+      
+      oscillator.type = 'sine'
+      oscillator.frequency.setValueAtTime(1, audioContext.currentTime) // 1Hz - inaudible
+      
+      // Very low gain
+      gainNode.gain.setValueAtTime(0.001, audioContext.currentTime)
+      
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      oscillator.start()
+      
+      // Store for cleanup
+      silentAudioRef.current = { oscillator, context: audioContext }
+      
+      // Set up Media Session API for lock screen
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: 'Recording Meeting',
+          artist: 'DealMotion',
+          album: 'Meeting Recording',
+        })
+        
+        navigator.mediaSession.playbackState = 'playing'
+        
+        // Handle media controls
+        navigator.mediaSession.setActionHandler('pause', () => {
+          // Don't actually pause - keep recording
+          console.log('Media session pause requested - ignoring')
+        })
+        
+        navigator.mediaSession.setActionHandler('play', () => {
+          console.log('Media session play requested')
+        })
+      }
+      
+      // Also create an Audio element as backup (helps on some iOS versions)
+      const audio = document.createElement('audio')
+      audio.id = 'dealmotion-background-audio'
+      // Use a data URL for a longer silent audio (10 seconds of silence)
+      audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
       audio.loop = true
-      audio.volume = 0.01 // Nearly silent but not 0 (some browsers ignore 0)
-      audio.play().catch(err => console.log('Silent audio failed:', err))
-      silentAudioRef.current = audio
-      console.log('Silent audio started')
+      audio.volume = 0.01
+      audio.setAttribute('playsinline', 'true')
+      audio.setAttribute('webkit-playsinline', 'true')
+      document.body.appendChild(audio)
+      audio.play().catch(err => console.log('Backup audio failed:', err))
+      
+      console.log('Background audio started with Media Session')
     } catch (err) {
-      console.log('Silent audio not supported:', err)
+      console.log('Background audio setup failed:', err)
+      
+      // Fallback to simple audio element
+      try {
+        const audio = new Audio()
+        audio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwmHAAAAAAD/+1DEAAAGAAGn9AAAIgAANIAAAARMQU1FMy4xMDBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV'
+        audio.loop = true
+        audio.volume = 0.01
+        audio.play().catch(() => {})
+        silentAudioRef.current = audio
+      } catch {}
     }
   }
 
-  // Stop silent audio
-  const stopSilentAudio = () => {
-    if (silentAudioRef.current) {
-      silentAudioRef.current.pause()
-      silentAudioRef.current.src = ''
-      silentAudioRef.current = null
-      console.log('Silent audio stopped')
+  // Stop background audio
+  const stopBackgroundAudio = () => {
+    // Stop oscillator if it exists
+    const ref = silentAudioRef.current as { oscillator?: OscillatorNode; context?: AudioContext } | HTMLAudioElement | null
+    if (ref && 'oscillator' in ref && ref.oscillator) {
+      try {
+        ref.oscillator.stop()
+        ref.context?.close()
+      } catch {}
+    } else if (ref && 'pause' in ref) {
+      // It's an HTMLAudioElement
+      ref.pause()
+      ;(ref as HTMLAudioElement).src = ''
     }
+    silentAudioRef.current = null
+    
+    // Remove backup audio element
+    const backupAudio = document.getElementById('dealmotion-background-audio')
+    if (backupAudio) {
+      ;(backupAudio as HTMLAudioElement).pause()
+      backupAudio.remove()
+    }
+    
+    // Clear media session
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'none'
+    }
+    
+    console.log('Background audio stopped')
   }
 
   const startRecording = async () => {
@@ -227,8 +316,8 @@ function RecordContent() {
       // Request wake lock to prevent screen from sleeping
       await requestWakeLock()
       
-      // Start silent audio as fallback (helps on iOS)
-      startSilentAudio()
+      // Start background audio (helps keep recording active on screen lock)
+      startBackgroundAudio()
       
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -296,7 +385,7 @@ function RecordContent() {
       
       // Clean up wake lock and silent audio on error
       await releaseWakeLock()
-      stopSilentAudio()
+      stopBackgroundAudio()
     }
   }
 
@@ -325,7 +414,7 @@ function RecordContent() {
       
       // Release wake lock and stop silent audio
       await releaseWakeLock()
-      stopSilentAudio()
+      stopBackgroundAudio()
       
       setState('stopped')
     }
