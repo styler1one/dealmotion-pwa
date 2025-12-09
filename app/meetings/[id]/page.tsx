@@ -52,7 +52,7 @@ export default function MeetingDetailPage() {
 
   if (isLoading) {
     return (
-      <AppShell hideNav>
+      <AppShell>
         <Header showBack title="Meeting" />
         <div className="px-4 py-6 space-y-4">
           <Skeleton className="h-8 w-3/4" />
@@ -65,7 +65,7 @@ export default function MeetingDetailPage() {
 
   if (error || !meeting) {
     return (
-      <AppShell hideNav>
+      <AppShell>
         <Header showBack title="Meeting" />
         <div className="px-4 py-12 text-center">
           <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
@@ -84,7 +84,7 @@ export default function MeetingDetailPage() {
   const startDate = new Date(meeting.start_time)
 
   return (
-    <AppShell hideNav>
+    <AppShell>
       <Header showBack title="Meeting" />
 
       <div className="px-4 py-6 space-y-4">

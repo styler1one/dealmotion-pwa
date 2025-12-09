@@ -86,7 +86,7 @@ export default function NewResearchPage() {
   }
 
   return (
-    <AppShell hideNav>
+    <AppShell>
       <Header title="New Research" showBack />
 
       <div className="px-4 py-6 space-y-6">

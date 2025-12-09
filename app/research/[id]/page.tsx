@@ -19,7 +19,7 @@ export default function ResearchDetailPage({ params }: { params: Promise<{ id: s
   }, [id])
 
   return (
-    <AppShell hideNav>
+    <AppShell>
       <Header title="Research" showBack />
       <div className="flex flex-col items-center justify-center py-12 px-4">
         <Spinner size="lg" />

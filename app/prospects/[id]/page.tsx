@@ -71,7 +71,7 @@ export default function ProspectDetailPage() {
 
   if (isLoading) {
     return (
-      <AppShell hideNav>
+      <AppShell>
         <Header showBack title="Prospect" />
         <div className="px-4 py-6 space-y-4">
           <Skeleton className="h-20 w-full" />
@@ -84,7 +84,7 @@ export default function ProspectDetailPage() {
 
   if (error || !hub) {
     return (
-      <AppShell hideNav>
+      <AppShell>
         <Header showBack title="Prospect" />
         <div className="px-4 py-12 text-center">
           <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
@@ -103,7 +103,7 @@ export default function ProspectDetailPage() {
   const { prospect, research, preparations, followups, upcoming_meetings } = hub
 
   return (
-    <AppShell hideNav>
+    <AppShell>
       <Header showBack title="Prospect" />
 
       <div className="px-4 py-6 space-y-4">

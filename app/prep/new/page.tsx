@@ -127,7 +127,7 @@ function NewPrepContent() {
   }
 
   return (
-    <AppShell hideNav>
+    <AppShell>
       <Header title="New Preparation" showBack />
 
       <div className="px-4 py-6 space-y-6">
@@ -343,7 +343,7 @@ function NewPrepContent() {
 export default function NewPrepPage() {
   return (
     <Suspense fallback={
-      <AppShell hideNav>
+      <AppShell>
         <Header title="New Preparation" showBack />
         <div className="flex items-center justify-center py-12">
           <Spinner size="lg" />
