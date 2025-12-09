@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { cn, formatDuration } from '@/lib/utils'
-import { Mic, Square, Pause, Play, Upload, AlertTriangle, ChevronDown, Check, Building2, Search, FileText } from 'lucide-react'
+import { Mic, Square, Pause, Play, Upload, AlertTriangle, ChevronDown, Check, Building2, Search, FileText, Users } from 'lucide-react'
 
 interface Prospect {
   id: string
@@ -35,9 +35,18 @@ interface Preparation {
   status: string
 }
 
+interface Contact {
+  id: string
+  name: string
+  title?: string
+  email?: string
+  phone?: string
+}
+
 interface ProspectHubResponse {
   prospect: Prospect
   preparations: Preparation[]
+  contacts: Contact[]
   followups: unknown[]
   research: unknown
 }
@@ -69,6 +78,11 @@ function RecordContent() {
   const [selectedPreparation, setSelectedPreparation] = useState<Preparation | null>(null)
   const [showPrepPicker, setShowPrepPicker] = useState(false)
   const [loadingPreps, setLoadingPreps] = useState(false)
+  
+  // Contact state
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [selectedContacts, setSelectedContacts] = useState<Contact[]>([])
+  const [showContactPicker, setShowContactPicker] = useState(false)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -86,12 +100,14 @@ function RecordContent() {
     }
   }, [preselectedProspectId, prospects, selectedProspect])
 
-  // Fetch preparations when prospect changes
+  // Fetch preparations and contacts when prospect changes
   useEffect(() => {
-    const fetchPreparations = async () => {
+    const fetchProspectData = async () => {
       if (!selectedProspect) {
         setPreparations([])
         setSelectedPreparation(null)
+        setContacts([])
+        setSelectedContacts([])
         return
       }
 
@@ -116,15 +132,18 @@ function RecordContent() {
             p => p.status === 'completed'
           )
           setPreparations(completedPreps)
+          
+          // Set contacts
+          setContacts(data.contacts || [])
         }
       } catch (err) {
-        console.error('Error fetching preparations:', err)
+        console.error('Error fetching prospect data:', err)
       } finally {
         setLoadingPreps(false)
       }
     }
 
-    fetchPreparations()
+    fetchProspectData()
   }, [selectedProspect, getToken])
 
   // Clean up on unmount
@@ -431,6 +450,11 @@ function RecordContent() {
       if (selectedPreparation) {
         formData.append('meeting_prep_id', selectedPreparation.id)
       }
+      
+      // Link to contacts if selected
+      if (selectedContacts.length > 0) {
+        formData.append('contact_ids', selectedContacts.map(c => c.id).join(','))
+      }
 
       // Upload with progress
       const xhr = new XMLHttpRequest()
@@ -553,6 +577,7 @@ function RecordContent() {
                         onClick={() => {
                           setSelectedProspect(prospect)
                           setSelectedPreparation(null) // Reset preparation when company changes
+                          setSelectedContacts([]) // Reset contacts when company changes
                           setShowProspectPicker(false)
                           setSearchQuery('')
                         }}
@@ -679,6 +704,84 @@ function RecordContent() {
                     </div>
                   )}
                 </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Contact Selector (Optional) - only show when prospect is selected and has contacts */}
+        {selectedProspect && contacts.length > 0 && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Users className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">Attendees</span>
+                <span className="text-xs text-muted-foreground">(optional)</span>
+              </div>
+              
+              <button
+                onClick={() => setShowContactPicker(!showContactPicker)}
+                className="w-full flex items-center justify-between p-3 rounded-lg border hover:bg-muted transition-colors"
+                disabled={state !== 'idle'}
+              >
+                <div className="text-left">
+                  {selectedContacts.length > 0 ? (
+                    <p className="font-medium text-sm">
+                      {selectedContacts.length} contact{selectedContacts.length > 1 ? 's' : ''} selected
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground">Select attendees (optional)</p>
+                  )}
+                </div>
+                <ChevronDown className={cn(
+                  'h-5 w-5 transition-transform',
+                  showContactPicker && 'rotate-180'
+                )} />
+              </button>
+
+              {showContactPicker && (
+                <div className="mt-3 pt-3 border-t">
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {contacts.map((contact) => {
+                      const isSelected = selectedContacts.some(c => c.id === contact.id)
+                      return (
+                        <button
+                          key={contact.id}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedContacts(selectedContacts.filter(c => c.id !== contact.id))
+                            } else {
+                              setSelectedContacts([...selectedContacts, contact])
+                            }
+                          }}
+                          className={cn(
+                            'w-full flex items-center justify-between p-3 rounded-lg text-left',
+                            isSelected
+                              ? 'bg-primary/10 text-primary'
+                              : 'hover:bg-muted'
+                          )}
+                        >
+                          <div>
+                            <p className="font-medium text-sm">{contact.name}</p>
+                            {contact.title && (
+                              <p className="text-xs text-muted-foreground">{contact.title}</p>
+                            )}
+                          </div>
+                          {isSelected && <Check className="h-5 w-5" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  
+                  {selectedContacts.length > 0 && (
+                    <button
+                      onClick={() => setSelectedContacts([])}
+                      className="w-full mt-2 p-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Clear selection
+                    </button>
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>
