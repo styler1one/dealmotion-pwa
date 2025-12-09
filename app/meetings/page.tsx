@@ -76,8 +76,8 @@ export default function MeetingsPage() {
           </div>
         ) : groupedMeetings.length > 0 ? (
           <div className="space-y-6">
-            {groupedMeetings.map((group) => (
-              <div key={group.date}>
+            {groupedMeetings.map((group, index) => (
+              <div key={group.label || index}>
                 <h2 className="text-sm font-medium text-muted-foreground mb-3">
                   {group.label}
                 </h2>
