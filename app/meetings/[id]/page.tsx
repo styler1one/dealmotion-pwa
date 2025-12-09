@@ -40,20 +40,15 @@ interface Meeting {
   preparation_id?: string
 }
 
-interface MeetingResponse {
-  meeting: Meeting
-}
-
 export default function MeetingDetailPage() {
   const params = useParams()
   const router = useRouter()
   const meetingId = params.id as string
   
-  const { data, isLoading, error } = useApi<MeetingResponse>(
+  // API returns meeting object directly (not wrapped)
+  const { data: meeting, isLoading, error } = useApi<Meeting>(
     `/api/v1/calendar-meetings/${meetingId}`
   )
-  
-  const meeting = data?.meeting
 
   if (isLoading) {
     return (

@@ -65,7 +65,7 @@ export default function ProspectDetailPage() {
   const prospectId = params.id as string
   
   const { data: hub, isLoading, error } = useApi<ProspectHub>(
-    `/api/v1/deals/${prospectId}/hub`
+    `/api/v1/prospects/${prospectId}/hub`
   )
 
   if (isLoading) {
