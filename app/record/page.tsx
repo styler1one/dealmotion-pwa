@@ -3,8 +3,8 @@
 // Force dynamic rendering - this page uses authentication
 export const dynamic = 'force-dynamic'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useRef, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/hooks/use-auth'
 import { useApi } from '@/lib/hooks/use-api'
 import { AppShell } from '@/components/layout/app-shell'
@@ -14,36 +14,37 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { cn, formatDuration } from '@/lib/utils'
-import { Mic, Square, Pause, Play, Upload, AlertTriangle, ChevronDown, Check } from 'lucide-react'
-import { api } from '@/lib/api'
+import { Mic, Square, Pause, Play, Upload, AlertTriangle, ChevronDown, Check, Building2, Search } from 'lucide-react'
 
-interface Meeting {
+interface Prospect {
   id: string
-  title: string
-  start_time: string
-  prospect_name?: string
+  company_name: string
+  domain?: string
 }
 
-interface MeetingsResponse {
-  meetings: Meeting[]
+interface ProspectsResponse {
+  prospects: Prospect[]
   total: number
-  has_more: boolean
 }
 
 type RecordingState = 'idle' | 'recording' | 'paused' | 'stopped' | 'uploading' | 'complete'
 
-export default function RecordPage() {
+function RecordContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { getToken } = useAuth()
-  const { data: meetingsData } = useApi<MeetingsResponse>('/api/v1/calendar-meetings')
   
-  // Extract meetings array from response
-  const meetings = meetingsData?.meetings || []
+  // Get pre-selected prospect from URL
+  const preselectedProspectId = searchParams.get('prospectId')
+  
+  const { data: prospectsData } = useApi<ProspectsResponse>('/api/v1/prospects')
+  const prospects = prospectsData?.prospects || []
 
   const [state, setState] = useState<RecordingState>('idle')
   const [duration, setDuration] = useState(0)
-  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null)
-  const [showMeetingPicker, setShowMeetingPicker] = useState(false)
+  const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null)
+  const [showProspectPicker, setShowProspectPicker] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [audioLevel, setAudioLevel] = useState(0)
@@ -54,12 +55,13 @@ export default function RecordPage() {
   const analyserRef = useRef<AnalyserNode | null>(null)
   const animationRef = useRef<number | null>(null)
 
-  // Auto-select first meeting
+  // Auto-select prospect from URL
   useEffect(() => {
-    if (meetings && meetings.length > 0 && !selectedMeeting) {
-      setSelectedMeeting(meetings[0])
+    if (preselectedProspectId && prospects.length > 0 && !selectedProspect) {
+      const prospect = prospects.find(p => p.id === preselectedProspectId)
+      if (prospect) setSelectedProspect(prospect)
     }
-  }, [meetings, selectedMeeting])
+  }, [preselectedProspectId, prospects, selectedProspect])
 
   // Clean up on unmount
   useEffect(() => {
@@ -72,7 +74,16 @@ export default function RecordPage() {
     }
   }, [])
 
+  const filteredProspects = prospects.filter(p =>
+    p.company_name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
   const startRecording = async () => {
+    if (!selectedProspect) {
+      setError('Please select a company first')
+      return
+    }
+
     try {
       setError(null)
       
@@ -169,6 +180,11 @@ export default function RecordPage() {
   }
 
   const uploadRecording = async () => {
+    if (!selectedProspect) {
+      setError('Please select a company')
+      return
+    }
+
     setState('uploading')
     setError(null)
 
@@ -179,18 +195,13 @@ export default function RecordPage() {
       const mimeType = mediaRecorderRef.current?.mimeType || 'audio/webm'
       const extension = mimeType.includes('webm') ? 'webm' : 'mp4'
       const blob = new Blob(chunksRef.current, { type: mimeType })
-      const localRecordingId = `pwa_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       
-      // Create form data with required fields for mobile API
+      // Create form data - use followup/upload endpoint (same as webapp)
       const formData = new FormData()
-      formData.append('file', blob, `recording_${localRecordingId}.${extension}`)
-      formData.append('duration_seconds', duration.toString())
-      formData.append('local_recording_id', localRecordingId)
-      
-      // Optional: link to prospect via meeting
-      if (selectedMeeting?.prospect_name) {
-        formData.append('prospect_name', selectedMeeting.prospect_name)
-      }
+      formData.append('file', blob, `recording_${Date.now()}.${extension}`)
+      formData.append('prospect_company_name', selectedProspect.company_name)
+      formData.append('include_coaching', 'false')
+      formData.append('language', 'en')
 
       // Upload with progress
       const xhr = new XMLHttpRequest()
@@ -200,22 +211,27 @@ export default function RecordPage() {
         }
       }
 
-      const response = await new Promise<{ success: boolean; recording_id: string }>((resolve, reject) => {
+      const response = await new Promise<{ id: string; prospect_id?: string }>((resolve, reject) => {
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
               resolve(JSON.parse(xhr.responseText))
             } catch {
-              resolve({ success: true, recording_id: '' })
+              resolve({ id: '' })
             }
           } else {
-            reject(new Error(`Upload failed: ${xhr.status}`))
+            let errorMsg = 'Upload failed'
+            try {
+              const errorData = JSON.parse(xhr.responseText)
+              errorMsg = errorData.detail || errorMsg
+            } catch {}
+            reject(new Error(errorMsg))
           }
         }
         xhr.onerror = () => reject(new Error('Upload failed - network error'))
         
-        // Use the mobile recordings endpoint
-        xhr.open('POST', `${process.env.NEXT_PUBLIC_API_URL}/api/v1/mobile/recordings/upload`)
+        // Use the followup/upload endpoint (triggers Inngest processing)
+        xhr.open('POST', `${process.env.NEXT_PUBLIC_API_URL}/api/v1/followup/upload`)
         xhr.setRequestHeader('Authorization', `Bearer ${token}`)
         xhr.send(formData)
       })
@@ -223,13 +239,18 @@ export default function RecordPage() {
       console.log('Upload response:', response)
       setState('complete')
       
-      // Redirect after success
+      // Redirect to followup detail or home after success
       setTimeout(() => {
-        router.push('/')
+        if (response.id) {
+          // Redirect to web app followup page (PWA doesn't have followup detail yet)
+          window.location.href = `https://dealmotion.ai/dashboard/followup/${response.id}`
+        } else {
+          router.push('/')
+        }
       }, 2000)
     } catch (err) {
       console.error('Upload error:', err)
-      setError('Failed to upload recording. Please try again.')
+      setError(err instanceof Error ? err.message : 'Failed to upload recording. Please try again.')
       setState('stopped')
     }
   }
@@ -246,55 +267,72 @@ export default function RecordPage() {
       <Header title="Record Meeting" showBack />
 
       <div className="px-4 py-6 space-y-6">
-        {/* Meeting Selector */}
+        {/* Company Selector (Required) */}
         <Card>
           <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Building2 className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">Company *</span>
+            </div>
             <button
-              onClick={() => setShowMeetingPicker(!showMeetingPicker)}
-              className="w-full flex items-center justify-between"
+              onClick={() => setShowProspectPicker(!showProspectPicker)}
+              className="w-full flex items-center justify-between p-3 rounded-lg border hover:bg-muted transition-colors"
               disabled={state !== 'idle'}
             >
               <div className="text-left">
-                <p className="text-sm text-muted-foreground">Meeting</p>
-                <p className="font-medium">
-                  {selectedMeeting ? selectedMeeting.title : 'Select a meeting'}
-                </p>
+                {selectedProspect ? (
+                  <p className="font-medium">{selectedProspect.company_name}</p>
+                ) : (
+                  <p className="text-muted-foreground">Select a company</p>
+                )}
               </div>
               <ChevronDown className={cn(
                 'h-5 w-5 transition-transform',
-                showMeetingPicker && 'rotate-180'
+                showProspectPicker && 'rotate-180'
               )} />
             </button>
 
-            {showMeetingPicker && meetings && (
-              <div className="mt-3 pt-3 border-t space-y-2">
-                {meetings.map((meeting) => (
-                  <button
-                    key={meeting.id}
-                    onClick={() => {
-                      setSelectedMeeting(meeting)
-                      setShowMeetingPicker(false)
-                    }}
-                    className={cn(
-                      'w-full flex items-center justify-between p-3 rounded-lg text-left',
-                      selectedMeeting?.id === meeting.id
-                        ? 'bg-primary/10 text-primary'
-                        : 'hover:bg-muted'
-                    )}
-                  >
-                    <div>
-                      <p className="font-medium">{meeting.title}</p>
-                      {meeting.prospect_name && (
-                        <p className="text-sm text-muted-foreground">
-                          {meeting.prospect_name}
-                        </p>
-                      )}
-                    </div>
-                    {selectedMeeting?.id === meeting.id && (
-                      <Check className="h-5 w-5" />
-                    )}
-                  </button>
-                ))}
+            {showProspectPicker && (
+              <div className="mt-3 pt-3 border-t space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search companies..."
+                    className="w-full rounded-lg border bg-background pl-10 pr-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <div className="max-h-48 overflow-y-auto space-y-1">
+                  {filteredProspects.length > 0 ? (
+                    filteredProspects.map((prospect) => (
+                      <button
+                        key={prospect.id}
+                        onClick={() => {
+                          setSelectedProspect(prospect)
+                          setShowProspectPicker(false)
+                          setSearchQuery('')
+                        }}
+                        className={cn(
+                          'w-full flex items-center justify-between p-3 rounded-lg text-left',
+                          selectedProspect?.id === prospect.id
+                            ? 'bg-primary/10 text-primary'
+                            : 'hover:bg-muted'
+                        )}
+                      >
+                        <span className="font-medium">{prospect.company_name}</span>
+                        {selectedProspect?.id === prospect.id && (
+                          <Check className="h-5 w-5" />
+                        )}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="text-center text-sm text-muted-foreground py-4">
+                      No companies found
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </CardContent>
@@ -315,13 +353,13 @@ export default function RecordPage() {
               </Badge>
             )}
             {state === 'uploading' && (
-              <Badge variant="info" className="mb-2">
-                ↑ UPLOADING
+              <Badge variant="secondary" className="mb-2">
+                ↑ UPLOADING {uploadProgress}%
               </Badge>
             )}
             {state === 'complete' && (
               <Badge variant="success" className="mb-2">
-                ✓ COMPLETE
+                ✓ PROCESSING
               </Badge>
             )}
             
@@ -345,8 +383,9 @@ export default function RecordPage() {
             {state === 'idle' && (
               <Button
                 size="xl"
-                variant="recording"
+                variant={selectedProspect ? "recording" : "outline"}
                 onClick={startRecording}
+                disabled={!selectedProspect}
                 className="h-20 w-20 rounded-full"
               >
                 <Mic className="h-8 w-8" />
@@ -401,7 +440,7 @@ export default function RecordPage() {
                   className="w-48"
                 >
                   <Upload className="h-5 w-5 mr-2" />
-                  Upload Recording
+                  Upload & Analyze
                 </Button>
                 <Button
                   size="lg"
@@ -417,8 +456,14 @@ export default function RecordPage() {
             {state === 'uploading' && (
               <div className="flex flex-col items-center gap-4">
                 <Spinner size="lg" />
-                <p className="text-muted-foreground">
-                  Uploading... {uploadProgress}%
+                <div className="w-48 h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Uploading recording...
                 </p>
               </div>
             )}
@@ -430,11 +475,18 @@ export default function RecordPage() {
                 </div>
                 <p className="font-medium">Recording uploaded!</p>
                 <p className="text-sm text-muted-foreground">
-                  Redirecting...
+                  Opening analysis...
                 </p>
               </div>
             )}
           </div>
+
+          {/* Help text for idle state */}
+          {state === 'idle' && !selectedProspect && (
+            <p className="text-sm text-muted-foreground mt-4 text-center">
+              Select a company above to start recording
+            </p>
+          )}
         </div>
 
         {/* Error Message */}
@@ -448,7 +500,7 @@ export default function RecordPage() {
         )}
 
         {/* Consent Reminder */}
-        {state === 'idle' && (
+        {state === 'idle' && selectedProspect && (
           <Card className="bg-amber-50 dark:bg-amber-950 border-amber-200">
             <CardContent className="p-4">
               <div className="flex items-start gap-3">
@@ -477,8 +529,37 @@ export default function RecordPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* What happens next */}
+        {state === 'stopped' && (
+          <Card className="bg-primary/5 border-primary/20">
+            <CardContent className="p-4">
+              <p className="font-medium text-sm mb-2">What happens next?</p>
+              <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+                <li>Recording is uploaded to DealMotion</li>
+                <li>AI transcribes the conversation</li>
+                <li>AI generates summary & action items</li>
+                <li>You&apos;ll see the analysis in ~2 minutes</li>
+              </ol>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </AppShell>
   )
 }
 
+export default function RecordPage() {
+  return (
+    <Suspense fallback={
+      <AppShell hideNav>
+        <Header title="Record Meeting" showBack />
+        <div className="flex items-center justify-center py-12">
+          <Spinner size="lg" />
+        </div>
+      </AppShell>
+    }>
+      <RecordContent />
+    </Suspense>
+  )
+}
