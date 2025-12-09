@@ -76,7 +76,6 @@ function RecordContent() {
   const analyserRef = useRef<AnalyserNode | null>(null)
   const animationRef = useRef<number | null>(null)
   const wakeLockRef = useRef<WakeLockSentinel | null>(null)
-  const silentAudioRef = useRef<{ oscillator: OscillatorNode; context: AudioContext } | HTMLAudioElement | null>(null)
 
   // Auto-select prospect from URL
   useEffect(() => {
@@ -139,21 +138,6 @@ function RecordContent() {
       if (wakeLockRef.current) {
         wakeLockRef.current.release().catch(() => {})
       }
-      // Clean up background audio
-      const ref = silentAudioRef.current as { oscillator?: OscillatorNode; context?: AudioContext } | HTMLAudioElement | null
-      if (ref) {
-        if ('oscillator' in ref && ref.oscillator) {
-          try {
-            ref.oscillator.stop()
-            ref.context?.close()
-          } catch {}
-        } else if ('pause' in ref) {
-          ;(ref as HTMLAudioElement).pause()
-        }
-      }
-      // Remove backup audio element
-      const backupAudio = document.getElementById('dealmotion-background-audio')
-      if (backupAudio) backupAudio.remove()
     }
   }, [])
 
@@ -199,110 +183,37 @@ function RecordContent() {
     }
   }
 
-  // Start background audio to keep browser active during screen lock
-  // This uses the Media Session API to make the browser think it's playing music
-  const startBackgroundAudio = () => {
-    try {
-      // Create audio context for generating a very low frequency tone
-      // This keeps the audio system active without being audible
-      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+  // Set up Media Session API for lock screen display (no AudioContext to avoid conflicts)
+  const setupMediaSession = () => {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: 'Recording Meeting',
+        artist: 'DealMotion',
+        album: 'Meeting Recording',
+      })
       
-      // Create oscillator at very low frequency (sub-bass, barely audible)
-      const oscillator = audioContext.createOscillator()
-      const gainNode = audioContext.createGain()
+      navigator.mediaSession.playbackState = 'playing'
       
-      oscillator.type = 'sine'
-      oscillator.frequency.setValueAtTime(1, audioContext.currentTime) // 1Hz - inaudible
+      // Handle media controls - ignore pause to keep recording
+      navigator.mediaSession.setActionHandler('pause', () => {
+        console.log('Media session pause requested - ignoring')
+      })
       
-      // Very low gain
-      gainNode.gain.setValueAtTime(0.001, audioContext.currentTime)
-      
-      oscillator.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-      oscillator.start()
-      
-      // Store for cleanup
-      silentAudioRef.current = { oscillator, context: audioContext }
-      
-      // Set up Media Session API for lock screen
-      if ('mediaSession' in navigator) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: 'Recording Meeting',
-          artist: 'DealMotion',
-          album: 'Meeting Recording',
-        })
-        
-        navigator.mediaSession.playbackState = 'playing'
-        
-        // Handle media controls
-        navigator.mediaSession.setActionHandler('pause', () => {
-          // Don't actually pause - keep recording
-          console.log('Media session pause requested - ignoring')
-        })
-        
-        navigator.mediaSession.setActionHandler('play', () => {
-          console.log('Media session play requested')
-        })
-      }
-      
-      // Also create an Audio element as backup (helps on some iOS versions)
-      const audio = document.createElement('audio')
-      audio.id = 'dealmotion-background-audio'
-      // Use a data URL for a longer silent audio (10 seconds of silence)
-      audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
-      audio.loop = true
-      audio.volume = 0.01
-      audio.setAttribute('playsinline', 'true')
-      audio.setAttribute('webkit-playsinline', 'true')
-      document.body.appendChild(audio)
-      audio.play().catch(err => console.log('Backup audio failed:', err))
-      
-      console.log('Background audio started with Media Session')
-    } catch (err) {
-      console.log('Background audio setup failed:', err)
-      
-      // Fallback to simple audio element
-      try {
-        const audio = new Audio()
-        audio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwmHAAAAAAD/+1DEAAAGAAGn9AAAIgAANIAAAARMQU1FMy4xMDBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV'
-        audio.loop = true
-        audio.volume = 0.01
-        audio.play().catch(() => {})
-        silentAudioRef.current = audio
-      } catch {}
+      navigator.mediaSession.setActionHandler('play', () => {
+        console.log('Media session play requested')
+      })
+    }
+    console.log('Media session configured')
+  }
+  
+  // Clear media session
+  const clearMediaSession = () => {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'none'
+      navigator.mediaSession.metadata = null
     }
   }
 
-  // Stop background audio
-  const stopBackgroundAudio = () => {
-    // Stop oscillator if it exists
-    const ref = silentAudioRef.current as { oscillator?: OscillatorNode; context?: AudioContext } | HTMLAudioElement | null
-    if (ref && 'oscillator' in ref && ref.oscillator) {
-      try {
-        ref.oscillator.stop()
-        ref.context?.close()
-      } catch {}
-    } else if (ref && 'pause' in ref) {
-      // It's an HTMLAudioElement
-      ref.pause()
-      ;(ref as HTMLAudioElement).src = ''
-    }
-    silentAudioRef.current = null
-    
-    // Remove backup audio element
-    const backupAudio = document.getElementById('dealmotion-background-audio')
-    if (backupAudio) {
-      ;(backupAudio as HTMLAudioElement).pause()
-      backupAudio.remove()
-    }
-    
-    // Clear media session
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = 'none'
-    }
-    
-    console.log('Background audio stopped')
-  }
 
   const startRecording = async () => {
     if (!selectedProspect) {
@@ -316,8 +227,8 @@ function RecordContent() {
       // Request wake lock to prevent screen from sleeping
       await requestWakeLock()
       
-      // Start background audio (helps keep recording active on screen lock)
-      startBackgroundAudio()
+      // Set up media session for lock screen display
+      setupMediaSession()
       
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -385,7 +296,7 @@ function RecordContent() {
       
       // Clean up wake lock and silent audio on error
       await releaseWakeLock()
-      stopBackgroundAudio()
+      clearMediaSession()
     }
   }
 
@@ -414,7 +325,7 @@ function RecordContent() {
       
       // Release wake lock and stop silent audio
       await releaseWakeLock()
-      stopBackgroundAudio()
+      clearMediaSession()
       
       setState('stopped')
     }
