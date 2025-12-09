@@ -78,7 +78,9 @@ export function useAuth() {
   }, [supabase])
 
   return {
-    ...authState,
+    user: authState.user,
+    session: authState.session,
+    loading: authState.loading,
     signIn,
     signOut,
     getToken,

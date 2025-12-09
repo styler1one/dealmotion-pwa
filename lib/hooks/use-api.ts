@@ -9,19 +9,37 @@ export function useApi<T>(
   endpoint: string | null,
   options?: SWRConfiguration
 ) {
-  const { getToken, isAuthenticated } = useAuth()
+  const { getToken, isAuthenticated, loading: authLoading } = useAuth()
 
   const fetcher = async (url: string) => {
     const token = await getToken()
-    if (!token) throw new Error('Not authenticated')
-    return api<T>(url, { token })
+    
+    if (!token) {
+      console.warn('[useApi] No token available for:', url)
+      throw new Error('Not authenticated')
+    }
+    
+    console.log('[useApi] Fetching:', url)
+    
+    try {
+      const result = await api<T>(url, { token })
+      console.log('[useApi] Success:', url, result)
+      return result
+    } catch (error) {
+      console.error('[useApi] Error:', url, error)
+      throw error
+    }
   }
 
+  // Only start fetching when auth is loaded AND user is authenticated
+  const shouldFetch = !authLoading && isAuthenticated && endpoint
+
   const { data, error, isLoading, mutate } = useSWR<T>(
-    isAuthenticated && endpoint ? endpoint : null,
+    shouldFetch ? endpoint : null,
     fetcher,
     {
       revalidateOnFocus: false,
+      revalidateOnReconnect: false,
       ...options,
     }
   )
@@ -29,7 +47,8 @@ export function useApi<T>(
   return {
     data,
     error,
-    isLoading,
+    // Show loading if auth is still loading OR if SWR is loading
+    isLoading: authLoading || isLoading,
     mutate,
   }
 }
@@ -67,4 +86,3 @@ export function useApiMutation<T, B extends Record<string, unknown> = Record<str
 
   return { mutate, isLoading, error }
 }
-
