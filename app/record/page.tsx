@@ -283,7 +283,7 @@ export default function RecordPage() {
           {/* Timer / Status */}
           <div className="text-center mb-8">
             {state === 'recording' && (
-              <Badge variant="recording\" className="mb-2 animate-pulse">
+              <Badge variant="recording" className="mb-2 animate-pulse">
                 ● REC
               </Badge>
             )}
