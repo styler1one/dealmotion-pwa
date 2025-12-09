@@ -223,7 +223,19 @@ function RecordContent() {
             let errorMsg = 'Upload failed'
             try {
               const errorData = JSON.parse(xhr.responseText)
-              errorMsg = errorData.detail || errorMsg
+              // Handle both string and object detail responses
+              if (typeof errorData.detail === 'string') {
+                errorMsg = errorData.detail
+              } else if (errorData.detail?.message) {
+                errorMsg = errorData.detail.message
+              } else if (errorData.message) {
+                errorMsg = errorData.message
+              }
+              
+              // Special handling for subscription limits (402)
+              if (xhr.status === 402 && errorData.detail?.error === 'limit_exceeded') {
+                errorMsg = 'You have reached your monthly limit. Please upgrade your plan to continue.'
+              }
             } catch {}
             reject(new Error(errorMsg))
           }
