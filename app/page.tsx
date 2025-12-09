@@ -7,25 +7,13 @@ import { useAuth } from '@/lib/hooks/use-auth'
 import { useApi } from '@/lib/hooks/use-api'
 import { AppShell } from '@/components/layout/app-shell'
 import { Header, NotificationBell } from '@/components/layout/header'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Button } from '@/components/ui/button'
-import { getGreeting, formatTime, isToday, getRelativeTime } from '@/lib/utils'
-import { Calendar, FileText, Mic, CheckCircle, AlertCircle, Clock, ChevronRight } from 'lucide-react'
+import { getGreeting, formatTime } from '@/lib/utils'
+import { Calendar, CheckCircle, Clock, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-
-interface DashboardStats {
-  meetings_today: number
-  meetings_prepared: number
-  pending_analysis: number
-  recent_activities: Array<{
-    type: string
-    title: string
-    created_at: string
-  }>
-}
 
 interface Meeting {
   id: string
@@ -39,10 +27,6 @@ interface Meeting {
 export default function HomePage() {
   const { user, loading: authLoading, isAuthenticated } = useAuth()
   
-  const { data: stats, isLoading: statsLoading } = useApi<DashboardStats>(
-    '/api/v1/dashboard/stats'
-  )
-  
   const { data: meetings, isLoading: meetingsLoading } = useApi<Meeting[]>(
     '/api/v1/calendar-meetings?filter=today'
   )
@@ -53,11 +37,15 @@ export default function HomePage() {
   }
 
   const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'there'
+  
+  // Calculate stats from meetings data
+  const meetingsToday = meetings?.length || 0
+  const meetingsPrepared = meetings?.filter(m => m.is_prepared).length || 0
 
   return (
     <AppShell>
       <Header
-        rightContent={<NotificationBell count={stats?.pending_analysis || 0} />}
+        rightContent={<NotificationBell count={0} />}
       />
 
       <div className="px-4 py-6 space-y-6">
@@ -72,26 +60,19 @@ export default function HomePage() {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <StatsCard
             icon={Calendar}
-            label="Meetings"
-            value={stats?.meetings_today ?? '-'}
-            loading={statsLoading}
+            label="Meetings Today"
+            value={meetingsToday}
+            loading={meetingsLoading}
           />
           <StatsCard
             icon={CheckCircle}
             label="Prepared"
-            value={stats?.meetings_prepared ?? '-'}
-            loading={statsLoading}
+            value={meetingsPrepared}
+            loading={meetingsLoading}
             variant="success"
-          />
-          <StatsCard
-            icon={Mic}
-            label="Pending"
-            value={stats?.pending_analysis ?? '-'}
-            loading={statsLoading}
-            variant="warning"
           />
         </div>
 
@@ -114,7 +95,7 @@ export default function HomePage() {
             </div>
           ) : meetings && meetings.length > 0 ? (
             <div className="space-y-3">
-              {meetings.slice(0, 3).map((meeting) => (
+              {meetings.slice(0, 5).map((meeting) => (
                 <MeetingCard key={meeting.id} meeting={meeting} />
               ))}
             </div>
@@ -123,46 +104,30 @@ export default function HomePage() {
               <CardContent className="py-8 text-center">
                 <Calendar className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
                 <p className="text-muted-foreground">No meetings today</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Enjoy your free day! 🎉
+                </p>
               </CardContent>
             </Card>
           )}
         </section>
 
-        {/* Recent Activity */}
-        <section>
-          <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
-            <Clock className="h-5 w-5 text-primary" />
-            Recent Activity
-          </h2>
-
-          {statsLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
+        {/* Quick Actions Hint */}
+        <Card className="bg-primary/5 border-primary/20">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                <Clock className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-medium">Quick Tip</p>
+                <p className="text-sm text-muted-foreground">
+                  Tap the + button to record, research, or prepare
+                </p>
+              </div>
             </div>
-          ) : stats?.recent_activities && stats.recent_activities.length > 0 ? (
-            <div className="space-y-2">
-              {stats.recent_activities.slice(0, 5).map((activity, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-3 py-2 border-b last:border-0"
-                >
-                  <ActivityIcon type={activity.type} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{activity.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {getRelativeTime(activity.created_at)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              No recent activity
-            </p>
-          )}
-        </section>
+          </CardContent>
+        </Card>
       </div>
     </AppShell>
   )
@@ -189,17 +154,21 @@ function StatsCard({
 
   return (
     <Card>
-      <CardContent className="p-3 text-center">
-        {loading ? (
-          <Skeleton className="h-8 w-8 mx-auto mb-1" />
-        ) : (
-          <p className={`text-2xl font-bold ${variantClasses[variant]}`}>
-            {value}
-          </p>
-        )}
-        <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
-          <Icon className="h-3 w-3" />
-          {label}
+      <CardContent className="p-4">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-lg bg-muted ${variantClasses[variant]}`}>
+            <Icon className="h-5 w-5" />
+          </div>
+          <div>
+            {loading ? (
+              <Skeleton className="h-7 w-8" />
+            ) : (
+              <p className={`text-2xl font-bold ${variantClasses[variant]}`}>
+                {value}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">{label}</p>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -209,22 +178,22 @@ function StatsCard({
 function MeetingCard({ meeting }: { meeting: Meeting }) {
   return (
     <Link href={`/meetings/${meeting.id}`}>
-      <Card interactive>
+      <Card className="card-touch cursor-pointer">
         <CardContent className="p-4">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="font-medium">{formatTime(meeting.start_time)}</span>
                 {meeting.is_prepared ? (
-                  <Badge variant="success">Prepared</Badge>
+                  <Badge variant="success">✅ Prepared</Badge>
                 ) : (
-                  <Badge variant="warning">Not prepared</Badge>
+                  <Badge variant="warning">⚠️ Not prepared</Badge>
                 )}
               </div>
               <p className="font-semibold">{meeting.title}</p>
               {meeting.prospect_name && (
                 <p className="text-sm text-muted-foreground">
-                  {meeting.prospect_name}
+                  🏢 {meeting.prospect_name}
                 </p>
               )}
             </div>
@@ -235,21 +204,3 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
     </Link>
   )
 }
-
-function ActivityIcon({ type }: { type: string }) {
-  const icons: Record<string, { icon: React.ElementType; color: string }> = {
-    research: { icon: FileText, color: 'text-blue-500' },
-    preparation: { icon: FileText, color: 'text-green-500' },
-    recording: { icon: Mic, color: 'text-red-500' },
-    meeting: { icon: Calendar, color: 'text-purple-500' },
-  }
-
-  const { icon: Icon, color } = icons[type] || icons.meeting
-
-  return (
-    <div className={`p-2 rounded-full bg-muted ${color}`}>
-      <Icon className="h-4 w-4" />
-    </div>
-  )
-}
-
