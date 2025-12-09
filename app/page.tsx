@@ -24,12 +24,21 @@ interface Meeting {
   is_prepared: boolean
 }
 
+interface MeetingsResponse {
+  meetings: Meeting[]
+  total: number
+  has_more: boolean
+}
+
 export default function HomePage() {
   const { user, loading: authLoading, isAuthenticated } = useAuth()
   
-  const { data: meetings, isLoading: meetingsLoading } = useApi<Meeting[]>(
-    '/api/v1/calendar-meetings?filter=today'
+  const { data: meetingsData, isLoading: meetingsLoading } = useApi<MeetingsResponse>(
+    '/api/v1/calendar-meetings'
   )
+  
+  // Extract meetings array from response
+  const meetings = meetingsData?.meetings || []
 
   // Redirect to login if not authenticated
   if (!authLoading && !isAuthenticated) {

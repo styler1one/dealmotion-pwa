@@ -21,11 +21,17 @@ interface Meeting {
   start_time: string
   end_time: string
   location?: string
-  video_link?: string
+  meeting_url?: string
   prospect_name?: string
-  attendees_count?: number
+  attendees?: Array<{ email: string; name?: string }>
   is_prepared: boolean
   preparation_id?: string
+}
+
+interface MeetingsResponse {
+  meetings: Meeting[]
+  total: number
+  has_more: boolean
 }
 
 type FilterOption = 'today' | 'tomorrow' | 'week'
@@ -33,9 +39,34 @@ type FilterOption = 'today' | 'tomorrow' | 'week'
 export default function MeetingsPage() {
   const [filter, setFilter] = useState<FilterOption>('today')
   
-  const { data: meetings, isLoading, mutate } = useApi<Meeting[]>(
-    `/api/v1/calendar-meetings?filter=${filter}`
+  // Build date filter params
+  const getDateParams = () => {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const nextWeek = new Date(today)
+    nextWeek.setDate(nextWeek.getDate() + 7)
+    
+    switch (filter) {
+      case 'today':
+        return `from_date=${today.toISOString()}&to_date=${tomorrow.toISOString()}`
+      case 'tomorrow':
+        const dayAfterTomorrow = new Date(tomorrow)
+        dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1)
+        return `from_date=${tomorrow.toISOString()}&to_date=${dayAfterTomorrow.toISOString()}`
+      case 'week':
+        return `from_date=${today.toISOString()}&to_date=${nextWeek.toISOString()}`
+      default:
+        return ''
+    }
+  }
+  
+  const { data: meetingsData, isLoading, mutate } = useApi<MeetingsResponse>(
+    `/api/v1/calendar-meetings?${getDateParams()}`
   )
+  
+  const meetings = meetingsData?.meetings || []
 
   // Group meetings by date
   const groupedMeetings = groupMeetingsByDate(meetings || [])
@@ -149,16 +180,16 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
                     {meeting.location}
                   </span>
                 )}
-                {meeting.video_link && (
+                {meeting.meeting_url && (
                   <span className="flex items-center gap-1">
                     <Video className="h-3.5 w-3.5" />
                     Video call
                   </span>
                 )}
-                {meeting.attendees_count && meeting.attendees_count > 0 && (
+                {meeting.attendees && meeting.attendees.length > 0 && (
                   <span className="flex items-center gap-1">
                     <Users className="h-3.5 w-3.5" />
-                    {meeting.attendees_count}
+                    {meeting.attendees.length}
                   </span>
                 )}
               </div>
